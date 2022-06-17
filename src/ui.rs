@@ -4,7 +4,7 @@ use std::{io, time::Duration};
 use tui::{
     backend::{CrosstermBackend, Backend },
     widgets::{TableState, Tabs, Wrap, Paragraph, Cell, Row, Table, Block, Borders},
-    layout::{Layout, Constraint, Direction},
+    layout::{Rect, Layout, Constraint, Direction},
     Terminal,
     style:: { Style,Color,Modifier},
     Frame,
@@ -35,20 +35,69 @@ impl TableMove {
     }
 }
 
-fn ui<B: Backend>(f: &mut Frame<B>, today_schedule: &Vec<wilma::Schedule>,
-                  little_homework: &Vec<wilma::Homework>, schedule_index: usize) {
-   let chunks = Layout::default()
+fn render_schedule<B: Backend>(f: &mut Frame<B>, full_schedule: &Vec<Vec<wilma::Schedule>>,
+                               tab_index: usize, main_chunks: Vec<Rect>) {
+
+
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .margin(0)
+        .constraints(
+            [
+                Constraint::Percentage(20),
+                Constraint::Percentage(20),
+                Constraint::Percentage(20),
+                Constraint::Percentage(20),
+                Constraint::Percentage(20),
+            ].as_ref()
+        )
+        .split(main_chunks[1]); 
+
+
+    let days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+    for i in 0..full_schedule.len() {
+        let schedule = &full_schedule[i];
+        let mut change_col = false;
+        let today_schedule_table = Table::new(schedule.iter().map(|x|{
+            let mut style = Style::default();
+            if change_col { style = style.bg(Color::Black); }
+            change_col = !change_col;
+            Row::new(vec![&*x.name, &*x.room, &*x.time]).style(style)
+        }))
+        .header(
+            Row::new(vec!["Name", "Room", "Time"])
+                .style(Style::default().fg(Color::Blue))
+        )
+        .widths(&[Constraint::Percentage(33), Constraint::Percentage(33),
+            Constraint::Percentage(33)])
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(days[i]),
+        );
+
+
+        f.render_widget(today_schedule_table, chunks[i]);
+    }
+
+}
+
+fn render_overview<B: Backend>(f: &mut Frame<B>, today_schedule: &Vec<wilma::Schedule>,
+                  litle_homework: &Vec<wilma::Homework>, homework_index: usize,
+                  tab_index: usize, main_chunks: Vec<Rect>) {
+    let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(0)
         .constraints(
             [
-                Constraint::Length(3),
                 Constraint::Percentage(40),
                 Constraint::Percentage(40),
                 Constraint::Percentage(20),
             ].as_ref()
         )
-        .split(f.size());
+        .split(main_chunks[1]);
+
     let mut change_col = false;
     let today_schedule_table = Table::new(today_schedule.iter().map(|x|{
         let mut style = Style::default();
@@ -70,7 +119,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, today_schedule: &Vec<wilma::Schedule>,
     );
 
     let mut change_col2 = false;
-    let little_homework_table = Table::new(little_homework.iter().map(|x|{
+    let litle_homework_table = Table::new(litle_homework.iter().map(|x|{
         let mut style = Style::default();
         if change_col2 { style = style.bg(Color::Black); }
         change_col2 = !change_col2;
@@ -88,23 +137,56 @@ fn ui<B: Backend>(f: &mut Frame<B>, today_schedule: &Vec<wilma::Schedule>,
             .borders(Borders::ALL)
             .title("Homework"),
     );
-    let par = Paragraph::new(&*little_homework[schedule_index].description)
+
+    let mut content = "";
+    if litle_homework.len() > 0 {
+        content = &*litle_homework[homework_index].description;
+    }
+    let par = Paragraph::new(content)
         .block(Block::default().title("Homework Description").borders(Borders::ALL))
         .wrap(Wrap { trim: true });
 
+
+    let mut homework_state = TableState::default();
+    homework_state.select(Some(homework_index));
+
+
+
+    f.render_widget(today_schedule_table, chunks[0]);
+    f.render_stateful_widget(litle_homework_table, chunks[1], &mut homework_state);
+    f.render_widget(par, chunks[2]);
+}
+
+fn ui<B: Backend>(f: &mut Frame<B>, today_schedule: &Vec<wilma::Schedule>,
+                  litle_homework: &Vec<wilma::Homework>,
+                  full_schedule: &Vec<Vec<wilma::Schedule>>,
+                  homework_index: usize, tab_index: usize) {
+    let main_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(0)
+        .constraints(
+            [
+                Constraint::Length(3),
+                Constraint::Min(0),
+
+            ].as_ref()
+        )
+        .split(f.size()); 
+
     let titles = ["Overview", "Schedule", "Exams", "Homeworks", "Notes", "Messages"].iter().cloned().map(Spans::from).collect();
     let tabs = Tabs::new(titles)
+        .select(tab_index)
         .block(Block::default().title("Welcome to wilma-tui").borders(Borders::ALL))
         .highlight_style(Style::default().fg(Color::Yellow));
 
+    f.render_widget(tabs, main_chunks[0]);
 
-    let mut state = TableState::default();
-    state.select(Some(schedule_index));
 
-    f.render_widget(tabs, chunks[0]);
-    f.render_widget(today_schedule_table, chunks[1]);
-    f.render_stateful_widget(little_homework_table, chunks[2], &mut state);
-    f.render_widget(par, chunks[3]);
+    match tab_index {
+        0 => render_overview(f, today_schedule, litle_homework, homework_index, tab_index, main_chunks),
+        1 => render_schedule(f, full_schedule, tab_index, main_chunks),
+        _ => {}
+    };
 
 }
 
@@ -117,16 +199,19 @@ pub fn run_ui(root: wilma::Root) -> Result<(), io::Error> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut homework_select = TableMove::new(root.homework.len());
+    let mut tab_select = TableMove::new(6);
 
     loop {
-        terminal.draw(|f| ui(f, &root.today_schedule, &root.homework, homework_select.index))?;
+
+        terminal.draw(|f| ui(f, &root.today_schedule, &root.homework, &root.full_schedule, homework_select.index, tab_select.index))?;
         if crossterm::event::poll(Duration::from_secs(1))? {
             if let Event::Key(key) = event::read()? {
                 match key.code {
                     KeyCode::Char('q') => break,
                     KeyCode::Char('j') => homework_select.down(),
                     KeyCode::Char('k') => homework_select.up(),
-                    //KeyCode::Tab => println!("down"),
+                    KeyCode::Char('h') => tab_select.up(),
+                    KeyCode::Char('l') => tab_select.down(),
                     _ => {}
                 }
             }

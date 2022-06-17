@@ -20,7 +20,7 @@ impl LoginInfo {
             .build()?;
         let res = client.get(format!("{}/index_json", base_url))
             .send().expect("Can't /index_json");
-        let obj: serde_json::Value = serde_json::from_str(&res.text()?).expect("Can't parse /index_json");
+        let obj: serde_json::Value = serde_json::from_str(&res.text().unwrap()).expect("Can't parse /index_json");
         let mut login_id: String = obj["SessionID"].to_string(); login_id.pop(); login_id.remove(0);
         if login_id == "null" { panic!("no session id") }
         let params = [
@@ -30,9 +30,11 @@ impl LoginInfo {
         ];
         let res2 = client.post(format!("{}/login", base_url))
             .form(&params)
-            .send().expect("Can't login");
-        let cookie = &res2.cookies().last().unwrap();
+            .send().expect("Can't /login");
+        //if res2.text()?.is_empty() == true { panic!("Can't login"); }
+        let cookie = res2.cookies().last().unwrap();
         let wilma2sid_ = String::from(cookie.value());
+        if wilma2sid_ == "" { panic!("No wilma2sid, probably wrong credentials"); }
 
         let res3 = client.get(base_url)
             .header("Cookie", format!("Wilma2SID={}", wilma2sid_))
@@ -48,7 +50,7 @@ impl LoginInfo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Homework {
     pub name: String,
     pub teacher: String,
@@ -56,7 +58,7 @@ pub struct Homework {
     pub date: String
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Schedule {
     pub name: String,
     pub teacher: String,
@@ -64,9 +66,10 @@ pub struct Schedule {
     pub time: String
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Root {
     pub today_schedule: Vec<Schedule>,
+    pub full_schedule: Vec<Vec<Schedule>>,
     pub homework: Vec<Homework>
 }
 impl Root {
@@ -84,23 +87,25 @@ impl Root {
             .send().expect("Can't get schedule").json::<overview::Root>().expect("Can't parse schedule");
 
         let mut today_sche: Vec<Schedule> = Vec::new();
+        let mut full_sche: Vec<Vec<Schedule>> = vec![Vec::<Schedule>::new(); 5];
         let mut home: Vec<Homework> = Vec::new(); 
 
         let current_timestamp = chrono::Local::now().timestamp();
         let current_day = chrono::offset::Local::now().date().weekday().number_from_monday();
         
         for sch in root.schedule {
+            let x = Schedule { name: sch.groups[0].full_caption.clone(),
+            teacher: sch.groups[0].teachers.as_ref().unwrap_or(
+                &vec!(overview::Teacher { id: 0, caption: "".to_string(),
+                long_caption: "".to_string(), schedule_visible: false
+            }))[0].long_caption.clone(),
+            room: sch.groups[0].rooms.as_ref().unwrap_or(
+                &vec!(overview::Room { id: 0, caption: "".to_string(),
+                long_caption: "".to_string(), schedule_visible: false
+            }))[0].caption.clone(),
+            time: format!("{}–{}", sch.start, sch.end)};
+            full_sche[sch.day as usize].push(x.clone());
             if sch.day == current_day as i64 {
-                let x = Schedule { name: sch.groups[0].full_caption.clone(),
-                teacher: sch.groups[0].teachers.as_ref().unwrap_or(
-                    &vec!(overview::Teacher { id: 0, caption: "".to_string(),
-                    long_caption: "".to_string(), schedule_visible: false
-                }))[0].long_caption.clone(),
-                room: sch.groups[0].rooms.as_ref().unwrap_or(
-                    &vec!(overview::Room { id: 0, caption: "".to_string(),
-                    long_caption: "".to_string(), schedule_visible: false
-                }))[0].caption.clone(),
-                time: format!("{}–{}", sch.start, sch.end)};
                 today_sche.push(x);
             }
         }
@@ -122,6 +127,6 @@ impl Root {
         }
 
 
-        Ok(Root { today_schedule: today_sche, homework: home})
+        Ok(Root { full_schedule: full_sche, today_schedule: today_sche, homework: home})
     }
 }
