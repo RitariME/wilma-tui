@@ -12,10 +12,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let base_url = credentials[2];
 
     let logininfo = wilma::LoginInfo::login(user, password, base_url).unwrap();
-    let data = wilma::Root::new(&logininfo.wilma2sid, &logininfo.formkey, logininfo.slug, &base_url).unwrap();
+    let data = wilma::Root::new(&logininfo.wilma2sid, &logininfo.formkey, &logininfo.slug, &base_url).unwrap();
 
     ui::run_ui(data);
-
+    
     Ok(())
 
 }

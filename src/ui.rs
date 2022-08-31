@@ -33,29 +33,61 @@ impl TableMove {
     fn up(&mut self) {
         if self.index > 0 { self.index -= 1 }
     }
+    fn go(&mut self) {
+        if self.index < self.item_count { self.index += 1 }
+        else { self.index = 0 }
+    }
 }
 
-fn render_schedule<B: Backend>(f: &mut Frame<B>, full_schedule: &Vec<Vec<wilma::Schedule>>,
-                               tab_index: usize, main_chunks: Vec<Rect>) {
-
-
+fn render_exams<B: Backend>(f: &mut Frame<B>, exams: &Vec<Vec<wilma::Schedule>>,
+                               main_chunks: Vec<Rect>) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .margin(0)
         .constraints(
             [
-                Constraint::Percentage(20),
-                Constraint::Percentage(20),
-                Constraint::Percentage(20),
-                Constraint::Percentage(20),
-                Constraint::Percentage(20),
+                Constraint::Percentage(50),
+                Constraint::Percentage(50),
+            ].as_ref()
+        )
+        .split(main_chunks[1]); }
+
+fn render_schedule<B: Backend>(f: &mut Frame<B>, full_schedule: &Vec<Vec<wilma::Schedule>>,
+                               main_chunks: Vec<Rect>) {
+
+
+    let big_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .margin(0)
+        .constraints(
+            [
+                Constraint::Percentage(33),
+                Constraint::Percentage(33),
+                Constraint::Percentage(33),
             ].as_ref()
         )
         .split(main_chunks[1]); 
 
 
+
     let days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
     for i in 0..full_schedule.len() {
+        let mut j = i;
+        let mut k = 0;
+        if i > 2 { j -= 3; k = 1; }
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .margin(0)
+            .constraints(
+                [
+                    Constraint::Percentage(50),
+                    Constraint::Percentage(50),
+                ].as_ref()
+            )
+            .split(big_chunks[j]); 
+
+
         let schedule = &full_schedule[i];
         let mut change_col = false;
         let today_schedule_table = Table::new(schedule.iter().map(|x|{
@@ -78,14 +110,14 @@ fn render_schedule<B: Backend>(f: &mut Frame<B>, full_schedule: &Vec<Vec<wilma::
         );
 
 
-        f.render_widget(today_schedule_table, chunks[i]);
+        f.render_widget(today_schedule_table, chunks[k]);
     }
 
 }
 
 fn render_overview<B: Backend>(f: &mut Frame<B>, today_schedule: &Vec<wilma::Schedule>,
                   litle_homework: &Vec<wilma::Homework>, homework_index: usize,
-                  tab_index: usize, main_chunks: Vec<Rect>) {
+                  main_chunks: Vec<Rect>) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(0)
@@ -173,7 +205,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, today_schedule: &Vec<wilma::Schedule>,
         )
         .split(f.size()); 
 
-    let titles = ["Overview", "Schedule", "Exams", "Homeworks", "Notes", "Messages"].iter().cloned().map(Spans::from).collect();
+    let titles = ["Overview", "Schedule", "Exams", "Notes", "Messages"].iter().cloned().map(Spans::from).collect();
     let tabs = Tabs::new(titles)
         .select(tab_index)
         .block(Block::default().title("Welcome to wilma-tui").borders(Borders::ALL))
@@ -183,8 +215,8 @@ fn ui<B: Backend>(f: &mut Frame<B>, today_schedule: &Vec<wilma::Schedule>,
 
 
     match tab_index {
-        0 => render_overview(f, today_schedule, litle_homework, homework_index, tab_index, main_chunks),
-        1 => render_schedule(f, full_schedule, tab_index, main_chunks),
+        0 => render_overview(f, today_schedule, litle_homework, homework_index, main_chunks),
+        1 => render_schedule(f, full_schedule, main_chunks),
         _ => {}
     };
 
@@ -199,7 +231,7 @@ pub fn run_ui(root: wilma::Root) -> Result<(), io::Error> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut homework_select = TableMove::new(root.homework.len());
-    let mut tab_select = TableMove::new(6);
+    let mut tab_select = TableMove::new(5);
 
     loop {
 
@@ -210,8 +242,7 @@ pub fn run_ui(root: wilma::Root) -> Result<(), io::Error> {
                     KeyCode::Char('q') => break,
                     KeyCode::Char('j') => homework_select.down(),
                     KeyCode::Char('k') => homework_select.up(),
-                    KeyCode::Char('h') => tab_select.up(),
-                    KeyCode::Char('l') => tab_select.down(),
+                    KeyCode::Tab => tab_select.go(),
                     _ => {}
                 }
             }

@@ -73,7 +73,7 @@ pub struct Root {
     pub homework: Vec<Homework>
 }
 impl Root {
-    pub fn new(wilma2sid: &str, formkey: &str, slug: Option<String>, base_url: &str) -> Result<Root, Box<dyn std::error::Error>> {
+    pub fn new(wilma2sid: &str, formkey: &str, slug: &Option<String>, base_url: &str) -> Result<Root, Box<dyn std::error::Error>> {
         let client = reqwest::blocking::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .build()?;
@@ -82,8 +82,14 @@ impl Root {
             Some(x) => url = format!("{}/!{}/overview", base_url, x),
             None => url = format!("{}/overview", base_url)
         }
-        let root = client.get(url)
+        let params = [
+            ("date", "13.8.2022"),
+            ("getfullmonth", "true"),
+            ("formkey", formkey)
+        ];
+        let root = client.post(url)
             .header("Cookie", format!("Wilma2SID={}", wilma2sid))
+            .form(&params)
             .send().expect("Can't get schedule").json::<overview::Root>().expect("Can't parse schedule");
 
         let mut today_sche: Vec<Schedule> = Vec::new();
@@ -104,8 +110,8 @@ impl Root {
                 long_caption: "".to_string(), schedule_visible: false
             }))[0].caption.clone(),
             time: format!("{}–{}", sch.start, sch.end)};
-            full_sche[sch.day as usize].push(x.clone());
-            if sch.day == current_day as i64 {
+            full_sche[sch.day as usize - 1].push(x.clone());
+            if sch.day == current_day as i64{
                 today_sche.push(x);
             }
         }
