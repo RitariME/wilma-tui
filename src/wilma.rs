@@ -79,11 +79,13 @@ impl Root {
             .build()?;
         let url;
         match slug {
-            Some(x) => url = format!("{}/!{}/overview", base_url, x),
+            Some(x) => url = format!("{}/!{}/overview", base_url, x), //TODO: parse from /schedule
             None => url = format!("{}/overview", base_url)
         }
+
+        let day = chrono::Local::today().format("%Y-%m-%d").to_string();
         let params = [
-            ("date", "13.8.2022"),
+            ("date", day.as_str()),
             ("getfullmonth", "true"),
             ("formkey", formkey)
         ];
